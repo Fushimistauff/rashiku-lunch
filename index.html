@@ -1,0 +1,818 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title>昼食管理システム</title>
+
+<!-- Firebase SDK v8（複数CDN自動フォールバック方式）-->
+<script>
+// SDKを複数の配信元から順番に試す。1つ目が失敗したら次を自動で試す。
+(function(){
+  // 試すCDNのリスト（app と database のペア）
+  var CDN_LIST = [
+    {
+      app: "https://www.gstatic.com/firebasejs/8.10.1/firebase-app-compat.js",
+      db:  "https://www.gstatic.com/firebasejs/8.10.1/firebase-database-compat.js",
+      name: "Google gstatic"
+    },
+    {
+      app: "https://cdn.jsdelivr.net/npm/firebase@8.10.1/firebase-app-compat.js",
+      db:  "https://cdn.jsdelivr.net/npm/firebase@8.10.1/firebase-database-compat.js",
+      name: "jsDelivr"
+    },
+    {
+      app: "https://unpkg.com/firebase@8.10.1/firebase-app-compat.js",
+      db:  "https://unpkg.com/firebase@8.10.1/firebase-database-compat.js",
+      name: "unpkg"
+    }
+  ];
+
+  var idx = 0;
+
+  function setStatus(msg){
+    // ローディング文言を更新（要素がまだ無い場合に備えてDOMContentLoaded後にも反映）
+    function apply(){
+      var lt = document.querySelector('.load-txt');
+      if (lt) lt.textContent = msg;
+    }
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', apply);
+    } else {
+      apply();
+    }
+  }
+
+  function loadScript(url, onload, onerror){
+    var s = document.createElement('script');
+    s.src = url;
+    s.onload = onload;
+    s.onerror = onerror;
+    document.head.appendChild(s);
+  }
+
+  function tryNext(){
+    if (idx >= CDN_LIST.length) {
+      // すべてのCDNが失敗
+      setStatus('Firebase の読み込みに失敗しました。ネットワークのフィルタリングやセキュリティ拡張機能が原因の可能性があります。別の回線（スマホのテザリング等）でお試しください。');
+      window.__FB_LOAD_FAILED = true;
+      return;
+    }
+    var cdn = CDN_LIST[idx];
+    setStatus('接続中… (' + cdn.name + ' から読み込み中)');
+    // まず app を読み込む
+    loadScript(cdn.app, function(){
+      // 成功したら database を読み込む
+      loadScript(cdn.db, function(){
+        // 両方成功
+        window.__FB_LOADED = true;
+        if (typeof window.__onFirebaseReady === 'function') {
+          window.__onFirebaseReady();
+        }
+      }, function(){
+        // database失敗 → 次のCDNへ
+        idx++;
+        tryNext();
+      });
+    }, function(){
+      // app失敗 → 次のCDNへ
+      idx++;
+      tryNext();
+    });
+  }
+
+  // 読み込み開始
+  tryNext();
+})();
+</script>
+
+<style>
+:root {
+  --color-background-primary:#ffffff;
+  --color-background-secondary:#f5f7fa;
+  --color-text-primary:#111111;
+  --color-text-secondary:#555555;
+  --color-text-tertiary:#999999;
+  --color-border-tertiary:#eaeaea;
+  --color-border-secondary:#cccccc;
+  --border-radius-lg:12px;
+  --border-radius-md:8px;
+  --font-sans:'Hiragino Sans','Hiragino Kaku Gothic ProN','Yu Gothic UI',Meiryo,sans-serif;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%;background:#e8ecf0;font-family:var(--font-sans)}
+body{display:flex;justify-content:center;align-items:flex-start}
+.root{width:100%;max-width:480px;height:100vh;background:var(--color-background-primary);display:flex;flex-direction:column;position:relative;overflow:hidden;box-shadow:0 0 30px rgba(0,0,0,.15)}
+.pg{display:none;flex-direction:column;flex:1;overflow:hidden}.pg.on{display:flex}
+.topbar{padding:12px 16px;background:var(--color-background-secondary);border-bottom:0.5px solid var(--color-border-tertiary);display:flex;align-items:center;gap:10px;flex-shrink:0}
+.top-date{font-size:13px;font-weight:500;color:var(--color-text-primary);flex:1}
+.top-badge{font-size:12px;font-weight:500;background:#E6F1FB;color:#185FA5;padding:3px 12px;border-radius:20px;flex-shrink:0}
+.plus-btn{width:28px;height:28px;border-radius:50%;border:0.5px solid var(--color-border-secondary);background:var(--color-background-primary);font-size:18px;cursor:pointer;display:flex;align-items:center;justify-content:center;color:var(--color-text-tertiary);line-height:1;flex-shrink:0;transition:all .15s}
+.plus-btn:hover{background:#E6F1FB;color:#185FA5;border-color:#185FA5}
+.p1-body{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:20px 28px;gap:12px}
+.p1-emoji{font-size:44px}.p1-title{font-size:20px;font-weight:600;color:var(--color-text-primary);text-align:center;line-height:1.4}
+.p1-hint{font-size:12px;color:var(--color-text-secondary);text-align:center}
+.input-block{width:100%;max-width:340px;display:flex;flex-direction:column;gap:3px}
+.inp-label{font-size:11px;font-weight:600;color:var(--color-text-tertiary);letter-spacing:.05em;padding-left:3px}
+.name-inp{width:100%;font-size:20px;font-weight:500;padding:12px 18px;border:2px solid var(--color-border-secondary);border-radius:var(--border-radius-md);background:var(--color-background-primary);color:var(--color-text-primary);text-align:center;outline:none;transition:border-color .2s,box-shadow .2s}
+.name-inp:focus{box-shadow:0 0 0 3px rgba(24,95,165,.12)}
+.name-inp::placeholder{font-size:14px;font-weight:400;color:var(--color-text-tertiary)}
+.furi-inp{width:100%;font-size:15px;padding:9px 18px;border:1.5px solid var(--color-border-secondary);border-radius:var(--border-radius-md);background:var(--color-background-primary);color:var(--color-text-primary);text-align:center;outline:none;transition:border-color .2s,box-shadow .2s}
+.furi-inp:focus{box-shadow:0 0 0 3px rgba(24,95,165,.12)}
+.furi-inp::placeholder{font-size:13px;color:var(--color-text-tertiary)}
+.name-inp.valid,.furi-inp.valid{border-color:#0F6E56}.name-inp.invalid,.furi-inp.invalid{border-color:#E24B4A}
+.field-hint{font-size:10px;min-height:14px;text-align:center}
+.field-hint.ok{color:#0F6E56}.field-hint.warn{color:#E24B4A}.field-hint.idle{color:var(--color-text-tertiary)}
+.btn-pri{width:100%;max-width:340px;padding:14px;font-size:15px;font-weight:600;border:none;border-radius:var(--border-radius-md);cursor:pointer;transition:all .2s}
+.btn-pri:disabled{background:var(--color-background-secondary);color:var(--color-text-tertiary);cursor:not-allowed}
+.btn-pri:not(:disabled){background:#185FA5;color:#fff;box-shadow:0 2px 8px rgba(24,95,165,.22)}
+.btn-pri:not(:disabled):hover{background:#0C447C;transform:translateY(-1px)}
+.p2-scroll{flex:1;overflow-y:auto;padding:18px 22px;display:flex;flex-direction:column;gap:14px}
+.p2-foot{padding:12px 22px;border-top:0.5px solid var(--color-border-tertiary);display:flex;gap:10px;flex-shrink:0;align-items:center}
+.f-group{display:flex;flex-direction:column;gap:7px}
+.f-label{font-size:11px;font-weight:700;color:var(--color-text-tertiary);letter-spacing:.08em;text-transform:uppercase;display:flex;align-items:center;gap:6px}
+.req{font-size:10px;background:#FEE2E2;color:#E24B4A;padding:1px 6px;border-radius:4px;font-weight:600}
+.m-row{display:flex;align-items:center;gap:10px;padding:11px 13px;background:var(--color-background-secondary);border-radius:var(--border-radius-md);border:0.5px solid var(--color-border-tertiary);transition:border-color .15s}
+.m-row+.m-row{margin-top:6px}.m-row:focus-within{border-color:#185FA5}
+.m-ico{width:32px;height:32px;border-radius:7px;display:flex;align-items:center;justify-content:center;font-size:15px;flex-shrink:0}
+.m-ico.mn{background:#E1F5EE}.m-ico.s1{background:#EEEDFE}.m-ico.s2{background:#FBEAF0}
+.m-lbl{font-size:12px;font-weight:500;color:var(--color-text-secondary);width:46px;flex-shrink:0}
+.m-row select{flex:1;font-size:13px;padding:7px 9px;border:0.5px solid var(--color-border-secondary);border-radius:6px;background:var(--color-background-primary);color:var(--color-text-primary);outline:none;cursor:pointer}
+.m-row select:focus{border-color:#185FA5}
+.note-ta{width:100%;font-size:13px;padding:10px 13px;border:0.5px solid var(--color-border-secondary);border-radius:var(--border-radius-md);background:var(--color-background-primary);color:var(--color-text-primary);resize:none;min-height:64px;font-family:inherit;line-height:1.6;outline:none}
+.note-ta:focus{border-color:#185FA5}
+.btn-sec{padding:11px 18px;font-size:13px;border:1.5px solid var(--color-border-secondary);border-radius:var(--border-radius-md);background:none;color:var(--color-text-secondary);cursor:pointer;font-weight:500;flex-shrink:0}.btn-sec:hover{background:var(--color-background-secondary)}
+.conf-scroll{flex:1;overflow-y:auto;padding:22px;display:flex;flex-direction:column;gap:12px}
+.conf-ttl{font-size:16px;font-weight:600;color:var(--color-text-primary);text-align:center}
+.conf-sub{font-size:13px;color:var(--color-text-secondary);text-align:center}
+.conf-card{background:var(--color-background-secondary);border-radius:var(--border-radius-md);border:0.5px solid var(--color-border-tertiary);overflow:hidden}
+.c-row{display:flex;align-items:flex-start;padding:11px 16px;border-bottom:0.5px solid var(--color-border-tertiary)}.c-row:last-child{border-bottom:none}
+.c-lbl{font-size:11px;font-weight:600;color:var(--color-text-tertiary);width:60px;flex-shrink:0;padding-top:2px}
+.c-val{font-size:13px;color:var(--color-text-primary);flex:1;line-height:1.5}
+.conf-foot{padding:12px 22px;border-top:0.5px solid var(--color-border-tertiary);display:flex;gap:10px;flex-shrink:0}
+.btn-ok{flex:2;padding:13px;background:#185FA5;color:#fff;border:none;border-radius:var(--border-radius-md);font-size:15px;font-weight:600;cursor:pointer}.btn-ok:hover{background:#0C447C}
+.btn-no{flex:1;padding:13px;border:1.5px solid var(--color-border-secondary);border-radius:var(--border-radius-md);font-size:14px;cursor:pointer;background:none;color:var(--color-text-primary);font-weight:500}.btn-no:hover{background:var(--color-background-secondary)}
+.p3-body{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:28px 32px;gap:14px;text-align:center}
+.p3-ico{font-size:66px;animation:pop .4s ease}
+@keyframes pop{0%{transform:scale(.4);opacity:0}70%{transform:scale(1.12)}100%{transform:scale(1);opacity:1}}
+.p3-title{font-size:25px;font-weight:700;color:var(--color-text-primary)}
+.p3-msg{font-size:15px;color:var(--color-text-secondary);line-height:1.8}
+.btn-done{padding:13px 40px;font-size:15px;font-weight:600;border:none;border-radius:var(--border-radius-md);cursor:pointer;transition:all .2s;background:#185FA5;color:#fff}
+.btn-done:hover:not(:disabled){background:#0C447C;transform:translateY(-1px)}
+.btn-done:disabled{background:var(--color-background-secondary);color:var(--color-text-tertiary);cursor:not-allowed}
+.stk-bar{padding:9px 12px;background:var(--color-background-secondary);border-bottom:0.5px solid var(--color-border-tertiary);display:flex;align-items:center;gap:5px;flex-shrink:0;flex-wrap:wrap}
+.stk-title{font-size:13px;font-weight:500;color:var(--color-text-primary);flex:1}
+.btn-stkback{padding:3px 10px;border:0.5px solid var(--color-border-secondary);border-radius:var(--border-radius-md);font-size:11px;cursor:pointer;background:none;color:var(--color-text-secondary);flex-shrink:0}.btn-stkback:hover{background:var(--color-background-secondary)}
+.btn-lunch-nav{padding:4px 8px;background:#5B2D8E;color:#fff;border:none;border-radius:var(--border-radius-md);font-size:11px;cursor:pointer;flex-shrink:0}.btn-lunch-nav:hover{background:#421f6a}
+.btn-record{padding:4px 8px;background:#B45309;color:#fff;border:none;border-radius:var(--border-radius-md);font-size:11px;cursor:pointer;flex-shrink:0}.btn-record:hover{background:#8a3c07}
+.btn-mail{padding:4px 8px;background:#0F6E56;color:#fff;border:none;border-radius:var(--border-radius-md);font-size:11px;cursor:pointer;flex-shrink:0}.btn-mail:hover{background:#0a5241}
+.stk-cols{display:grid;grid-template-columns:1fr 1fr;flex:1;overflow:hidden}
+.stk-col{border-right:0.5px solid var(--color-border-tertiary);display:flex;flex-direction:column;overflow:hidden}.stk-col:last-child{border-right:none}
+.sc-hdr{padding:8px 10px;background:var(--color-background-secondary);border-bottom:0.5px solid var(--color-border-tertiary);display:flex;align-items:center;gap:5px;flex-shrink:0}
+.sc-hdr h4{font-size:12px;font-weight:500;color:var(--color-text-primary);flex:1}.sc-cnt{font-size:10px;color:var(--color-text-tertiary)}
+.sc-add{display:flex;gap:4px;padding:6px 8px;border-bottom:0.5px solid var(--color-border-tertiary);flex-shrink:0}
+.sc-add input{flex:1;font-size:11px;padding:4px 7px;border:0.5px solid var(--color-border-secondary);border-radius:var(--border-radius-md);background:var(--color-background-primary);color:var(--color-text-primary);outline:none}
+.sc-add input:focus{border-color:#185FA5}
+.sc-add button{padding:4px 8px;background:#185FA5;color:#fff;border:none;border-radius:var(--border-radius-md);font-size:11px;cursor:pointer}
+.sc-items{flex:1;overflow-y:auto}
+.si{display:flex;align-items:center;gap:5px;padding:6px 10px;border-bottom:0.5px solid var(--color-border-tertiary)}.si:last-child{border-bottom:none}
+.si-name{flex:1;font-size:11px;color:var(--color-text-primary);line-height:1.4}.si-name.z{color:var(--color-text-tertiary);text-decoration:line-through}
+.qc{display:flex;align-items:center;gap:2px;flex-shrink:0}
+.qb{width:18px;height:18px;border-radius:3px;border:0.5px solid var(--color-border-secondary);background:var(--color-background-secondary);font-size:12px;cursor:pointer;display:flex;align-items:center;justify-content:center;padding:0;color:var(--color-text-primary);line-height:1}
+.qb.p:hover{background:#E6F1FB;color:#185FA5;border-color:#185FA5}.qb.m:hover{background:#FCEBEB;color:#E24B4A;border-color:#E24B4A}
+.qn{width:24px;text-align:center;font-size:11px;font-weight:500}.qn.z{color:#E24B4A}
+.del{background:none;border:none;cursor:pointer;color:var(--color-text-tertiary);font-size:13px;padding:0 2px;line-height:1}.del:hover{color:#E24B4A}
+.sc-empty{padding:20px;font-size:11px;color:var(--color-text-tertiary);text-align:center;line-height:1.8}
+.lunch-bar{padding:9px 12px;background:var(--color-background-secondary);border-bottom:0.5px solid var(--color-border-tertiary);display:flex;align-items:center;gap:8px;flex-shrink:0}
+.lunch-bar-title{font-size:13px;font-weight:500;color:var(--color-text-primary);flex:1}
+.lunch-count-badge{font-size:11px;color:var(--color-text-tertiary)}
+.btn-refresh{padding:3px 10px;border:0.5px solid var(--color-border-secondary);border-radius:var(--border-radius-md);font-size:11px;cursor:pointer;background:none;color:var(--color-text-secondary)}.btn-refresh:hover{background:var(--color-background-secondary)}
+.lunch-list-wrap{flex:1;overflow-y:auto}
+.lunch-empty{display:flex;flex-direction:column;align-items:center;justify-content:center;height:100%;gap:10px;color:var(--color-text-tertiary);font-size:13px}
+.lunch-empty span:first-child{font-size:40px}
+.l-item{border-bottom:0.5px solid var(--color-border-tertiary)}
+.l-hdr{display:flex;align-items:center;gap:10px;padding:11px 16px;cursor:pointer;user-select:none;background:var(--color-background-primary);transition:background .15s}.l-hdr:hover{background:var(--color-background-secondary)}
+.l-arrow{font-size:11px;color:#5B2D8E;width:14px;flex-shrink:0;font-weight:700}
+.l-nameblock{flex:1;display:flex;flex-direction:column;gap:1px}
+.l-name{font-size:14px;font-weight:600;color:var(--color-text-primary)}.l-furi{font-size:10px;color:var(--color-text-tertiary)}
+.l-time{font-size:11px;color:var(--color-text-tertiary);flex-shrink:0}.l-tip{font-size:10px;color:var(--color-text-tertiary);flex-shrink:0}
+.l-det{max-height:0;overflow:hidden;transition:max-height .28s ease;background:var(--color-background-secondary)}.l-det.open{border-top:0.5px solid var(--color-border-tertiary)}
+.l-det-row{display:flex;align-items:baseline;padding:8px 16px 8px 40px;border-bottom:0.5px solid var(--color-border-tertiary)}.l-det-row:last-child{border-bottom:none}
+.l-det-lbl{font-size:11px;font-weight:600;color:var(--color-text-tertiary);width:64px;flex-shrink:0}
+.l-det-val{font-size:13px;color:var(--color-text-primary);flex:1;line-height:1.5}
+.rec-bar{padding:9px 12px;background:var(--color-background-secondary);border-bottom:0.5px solid var(--color-border-tertiary);display:flex;align-items:center;gap:8px;flex-shrink:0}
+.rec-bar-title{font-size:13px;font-weight:500;color:var(--color-text-primary);flex:1}
+.btn-reset-rec{padding:3px 10px;background:#C0392B;color:#fff;border:none;border-radius:var(--border-radius-md);font-size:11px;cursor:pointer;flex-shrink:0}.btn-reset-rec:hover{background:#922B21}
+.rec-tabs{display:flex;border-bottom:0.5px solid var(--color-border-tertiary);flex-shrink:0;background:var(--color-background-secondary)}
+.rec-tab{flex:1;padding:10px 4px;font-size:12px;font-weight:500;border:none;background:none;cursor:pointer;color:var(--color-text-tertiary);border-bottom:2.5px solid transparent;transition:all .15s}
+.rec-tab.on{color:#185FA5;border-bottom-color:#185FA5;background:var(--color-background-primary);font-weight:700}
+.rec-tab:hover:not(.on){color:var(--color-text-secondary);background:var(--color-background-primary)}
+.rec-body{flex:1;overflow-y:auto;padding:14px 14px 20px}
+.rank-section-title{font-size:14px;font-weight:700;color:var(--color-text-primary);padding:0 0 8px;border-bottom:2.5px solid #B45309;margin-bottom:14px}
+.rank-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+.rank-col-hdr{font-size:11px;font-weight:700;color:var(--color-text-secondary);margin-bottom:8px;padding-bottom:5px;border-bottom:0.5px solid var(--color-border-tertiary)}
+.rank-item{display:flex;align-items:center;gap:6px;padding:7px 0;border-bottom:0.5px solid var(--color-border-tertiary)}.rank-item:last-child{border-bottom:none}
+.rank-pos{font-size:15px;width:26px;flex-shrink:0;text-align:center;line-height:1}
+.rank-pos.num{font-size:12px;font-weight:700;color:var(--color-text-tertiary)}
+.rank-info{flex:1;min-width:0}
+.rank-name{font-size:11px;color:var(--color-text-primary);line-height:1.3;word-break:break-all}
+.rank-bar-wrap{width:100%;height:4px;background:var(--color-border-tertiary);border-radius:2px;margin-top:4px}
+.rank-bar-m{height:4px;border-radius:2px;background:linear-gradient(90deg,#0F6E56,#2ECC71)}
+.rank-bar-s{height:4px;border-radius:2px;background:linear-gradient(90deg,#534AB7,#9B59B6)}
+.rank-cnt{font-size:11px;font-weight:700;color:var(--color-text-secondary);flex-shrink:0;white-space:nowrap}
+.rank-empty{padding:20px;font-size:11px;color:var(--color-text-tertiary);text-align:center}
+.h2-date-block{border-bottom:0.5px solid var(--color-border-tertiary)}
+.h2-date-hdr{display:flex;align-items:center;gap:8px;padding:12px 14px;cursor:pointer;user-select:none;background:var(--color-background-primary);transition:background .15s}
+.h2-date-hdr:hover{background:#FEF9EC}
+.h2-arr{font-size:12px;color:#B45309;width:14px;flex-shrink:0;font-weight:700}
+.h2-date-lbl{font-size:13px;font-weight:700;color:#B45309;flex:1}
+.h2-cnt{font-size:10px;color:#B45309;background:#FEF3C7;padding:2px 8px;border-radius:10px;font-weight:600;flex-shrink:0}
+.h2-tip{font-size:10px;color:var(--color-text-tertiary);flex-shrink:0}
+.h2-names{max-height:0;overflow:hidden;transition:max-height .35s ease;background:var(--color-background-secondary)}
+.h2-names.open{max-height:5000px}
+.h2-name-block{border-top:0.5px solid var(--color-border-tertiary)}
+.h2-name-hdr{display:flex;align-items:center;gap:8px;padding:10px 14px 10px 28px;cursor:pointer;user-select:none;transition:background .15s}
+.h2-name-hdr:hover{background:rgba(91,45,142,.07)}
+.h2-narr{font-size:10px;color:#5B2D8E;width:12px;flex-shrink:0;font-weight:700}
+.h2-ninfo{flex:1;display:flex;align-items:baseline;gap:5px;min-width:0}
+.h2-nname{font-size:13px;font-weight:600;color:var(--color-text-primary)}
+.h2-nfuri{font-size:10px;color:var(--color-text-tertiary)}
+.h2-ntime{font-size:10px;color:var(--color-text-tertiary);flex-shrink:0}
+.h2-detail{max-height:0;overflow:hidden;transition:max-height .25s ease;background:var(--color-background-primary)}
+.h2-detail.open{max-height:280px}
+.h2-det-row{display:flex;align-items:baseline;padding:8px 14px 8px 52px;border-top:0.5px solid var(--color-border-tertiary)}
+.h2-det-lbl{font-size:11px;font-weight:600;color:var(--color-text-tertiary);width:56px;flex-shrink:0}
+.h2-det-val{font-size:12px;color:var(--color-text-primary);flex:1;line-height:1.5}
+.rec-no-data{display:flex;flex-direction:column;align-items:center;justify-content:center;height:200px;gap:10px;color:var(--color-text-tertiary);font-size:13px}
+.rec-no-data span:first-child{font-size:36px}
+.ov{position:absolute;inset:0;background:rgba(0,0,0,.72);display:flex;align-items:center;justify-content:center;z-index:100;backdrop-filter:blur(2px);-webkit-backdrop-filter:blur(2px)}
+.mbox{background:#fff;color:#111;border-radius:14px;border:2px solid rgba(0,0,0,.12);padding:24px;width:310px;display:flex;flex-direction:column;gap:14px;box-shadow:0 32px 80px rgba(0,0,0,.45),0 8px 24px rgba(0,0,0,.3)}
+.mbox-lg{background:#fff;color:#111;border-radius:14px;border:2px solid rgba(0,0,0,.12);padding:22px;width:calc(100% - 40px);max-width:460px;display:flex;flex-direction:column;gap:11px;box-shadow:0 32px 80px rgba(0,0,0,.45),0 8px 24px rgba(0,0,0,.3)}
+.mbox h3,.mbox-lg h3{font-size:15px;font-weight:700;color:#111}
+.mbox p,.mbox-lg p,.m-desc{font-size:12px;color:#444;line-height:1.7}
+.mbox input{width:100%;font-size:14px;padding:10px 12px;border:1.5px solid #ccc;border-radius:8px;background:#f9f9f9;color:#111;outline:none}
+.mbox input:focus{border-color:#185FA5;box-shadow:0 0 0 3px rgba(24,95,165,.15);background:#fff}
+.m-err{font-size:12px;color:#C0392B;display:none;font-weight:600;background:#FEE2E2;padding:7px 10px;border-radius:6px;border:1px solid #F5C6CB}
+.email-ta{width:100%;font-size:11px;padding:10px 12px;border:1.5px solid #ccc;border-radius:8px;background:#f9f9f9;color:#111;resize:vertical;min-height:130px;font-family:inherit;line-height:1.5;outline:none}
+.email-ta:focus{border-color:#185FA5;box-shadow:0 0 0 3px rgba(24,95,165,.15);background:#fff}
+.m-ld{font-size:12px;color:#666;text-align:center;padding:8px;display:none;font-weight:500}
+.res-wrap{display:none;border:1.5px solid #ddd;border-radius:8px;overflow:hidden;max-height:190px;overflow-y:auto;background:#fff}
+.res-hdr{padding:9px 13px;background:#E1F5EE;font-size:12px;font-weight:700;color:#0F6E56;border-bottom:1px solid #c5e8d6}
+.res-item{display:flex;align-items:center;gap:7px;padding:6px 13px;border-bottom:1px solid #eee;font-size:11px;color:#111}.res-item:last-child{border-bottom:none}
+.tag-m{background:#E1F5EE;color:#0F6E56;font-size:10px;padding:1px 5px;border-radius:3px;font-weight:700;flex-shrink:0}
+.tag-s{background:#EEEDFE;color:#534AB7;font-size:10px;padding:1px 5px;border-radius:3px;font-weight:700;flex-shrink:0}
+.res-st{margin-left:auto;font-size:10px;color:#666;flex-shrink:0}.new-lbl{color:#185FA5;font-weight:700}
+.mbtns{display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap}
+.mbtns button{padding:9px 18px;border-radius:8px;font-size:13px;cursor:pointer;font-weight:600}
+.mb-c{border:1.5px solid #ccc;background:#f5f5f5;color:#333}.mb-c:hover{background:#e8e8e8}
+.mb-ok{background:#185FA5;color:#fff;border:none}.mb-ok:hover{background:#0C447C}
+.mb-del{background:#C0392B;color:#fff;border:none}.mb-del:hover{background:#922B21}
+.del-name{font-size:13px;font-weight:700;color:#111;background:#F5F5F5;padding:10px 14px;border-radius:8px;text-align:center;border:1.5px solid #ddd}
+.toast{position:absolute;bottom:12px;right:12px;color:#fff;padding:9px 16px;border-radius:var(--border-radius-md);font-size:12px;font-weight:500;opacity:0;transition:opacity .3s;pointer-events:none;z-index:200;background:#0F6E56;max-width:280px;text-align:center}
+.toast.show{opacity:1}
+/* ローディング */
+.load-ov{position:absolute;inset:0;background:rgba(255,255,255,.95);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;z-index:500}
+.load-spin{width:44px;height:44px;border:4px solid #e0e0e0;border-top-color:#185FA5;border-radius:50%;animation:spin .8s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+.load-txt{font-size:14px;color:#555;font-weight:500}
+.conn-banner{position:absolute;top:0;left:0;right:0;background:#E24B4A;color:#fff;font-size:12px;text-align:center;padding:6px;z-index:400;display:none}
+</style>
+</head>
+<body>
+<div class="root" id="root">
+
+  <!-- ローディング画面 -->
+  <div class="load-ov" id="load-ov">
+    <div class="load-spin"></div>
+    <div class="load-txt">サーバーに接続中...</div>
+  </div>
+
+  <!-- オフライン通知バナー -->
+  <div class="conn-banner" id="conn-banner">⚠️ インターネット接続が切断されました。データが更新されない場合があります。</div>
+
+  <!-- P1 -->
+  <div class="pg on" id="pg-1">
+    <div class="topbar"><span class="top-date" id="d1"></span><button class="plus-btn" id="plus-btn" title="在庫管理（事務員専用）">＋</button></div>
+    <div class="p1-body">
+      <span class="p1-emoji">🍱</span>
+      <p class="p1-title">本日のお昼ご飯を<br>選びましょう</p>
+      <p class="p1-hint">お名前とふりがなをご入力ください</p>
+      <div class="input-block"><span class="inp-label">お名前（漢字）</span><input class="name-inp" id="name-inp" type="text" placeholder="例：山田太郎" autocomplete="off"><span class="field-hint idle" id="name-hint">漢字でご入力ください</span></div>
+      <div class="input-block"><span class="inp-label">ふりがな（ひらがな）</span><input class="furi-inp" id="furi-inp" type="text" placeholder="例：やまだたろう" autocomplete="off"><span class="field-hint idle" id="furi-hint">ひらがなのみでご入力ください</span></div>
+      <button class="btn-pri" id="btn-n1" disabled>次へ　→</button>
+    </div>
+  </div>
+
+  <!-- P2 -->
+  <div class="pg" id="pg-2">
+    <div class="topbar"><span class="top-date" id="d2"></span><span class="top-badge" id="user-badge"></span></div>
+    <div class="p2-scroll">
+      <div class="f-group"><div class="f-label">主菜 <span class="req">必須</span></div><div class="m-row"><div class="m-ico mn">🍖</div><span class="m-lbl">主菜</span><select id="sel-main"></select></div></div>
+      <div class="f-group"><div class="f-label">副菜</div><div class="m-row"><div class="m-ico s1">🥗</div><span class="m-lbl">副菜①</span><select id="sel-s1"></select></div><div class="m-row"><div class="m-ico s2">🥬</div><span class="m-lbl">副菜②</span><select id="sel-s2"></select></div></div>
+      <div class="f-group"><div class="f-label">備考（任意）</div><textarea class="note-ta" id="note-ta" placeholder="アレルギー・特記事項など"></textarea></div>
+    </div>
+    <div class="p2-foot"><button class="btn-sec" id="btn-b2">← 戻る</button><button class="btn-pri" id="btn-n2" disabled style="flex:1">確認へ　→</button></div>
+  </div>
+
+  <!-- CONFIRM -->
+  <div class="pg" id="pg-conf">
+    <div class="topbar" style="justify-content:center"><span style="font-size:15px;font-weight:600;color:var(--color-text-primary)">✅ 選択内容の確認</span></div>
+    <div class="conf-scroll"><p class="conf-ttl" id="conf-ttl"></p><p class="conf-sub">以下の内容でよろしいですか？</p><div class="conf-card" id="conf-card"></div></div>
+    <div class="conf-foot"><button class="btn-no" id="btn-no">← 修正する</button><button class="btn-ok" id="btn-ok">OK　✓</button></div>
+  </div>
+
+  <!-- P3 -->
+  <div class="pg" id="pg-3">
+    <div class="p3-body"><span class="p3-ico">🎉</span><p class="p3-title">ありがとうございます！</p><p class="p3-msg" id="p3-msg"></p><button class="btn-done" id="btn-done">完了</button></div>
+  </div>
+
+  <!-- STOCK -->
+  <div class="pg" id="pg-stk">
+    <div class="stk-bar">
+      <button class="btn-stkback" id="btn-stkback">← 戻る</button>
+      <span class="stk-title">メニュー在庫管理</span>
+      <button class="btn-lunch-nav" id="btn-lunch-nav">📋 昼食確認</button>
+      <button class="btn-record" id="btn-record">📊 記録</button>
+      <button class="btn-mail" id="btn-mail">📧 メール取り込み</button>
+    </div>
+    <div class="stk-cols">
+      <div class="stk-col"><div class="sc-hdr"><span style="font-size:14px">🍖</span><h4>主菜</h4><span class="sc-cnt" id="cnt-m"></span></div><div class="sc-add"><input type="text" id="inp-main" placeholder="主菜名を入力"><button onclick="addI('main')">追加</button></div><div class="sc-items" id="items-main"></div></div>
+      <div class="stk-col"><div class="sc-hdr"><span style="font-size:14px">🥗</span><h4>副菜</h4><span class="sc-cnt" id="cnt-s"></span></div><div class="sc-add"><input type="text" id="inp-side" placeholder="副菜名を入力"><button onclick="addI('side')">追加</button></div><div class="sc-items" id="items-side"></div></div>
+    </div>
+  </div>
+
+  <!-- LUNCH LIST -->
+  <div class="pg" id="pg-lunch">
+    <div class="lunch-bar"><button class="btn-stkback" id="btn-lunchback">← 戻る</button><span class="lunch-bar-title">📋 本日の昼食管理</span><span class="lunch-count-badge" id="lunch-count"></span><button class="btn-refresh" id="btn-refresh">🔄 更新</button></div>
+    <div class="lunch-list-wrap" id="lunch-list-wrap"></div>
+  </div>
+
+  <!-- 記録 -->
+  <div class="pg" id="pg-record">
+    <div class="rec-bar"><button class="btn-stkback" id="btn-recback">← 戻る</button><span class="rec-bar-title">📊 過去の記録 &amp; ランキング</span><button class="btn-reset-rec" id="btn-reset-rec">🗑️ 記録リセット</button></div>
+    <div class="rec-tabs"><button class="rec-tab on" id="tab-rank">🏆 人気ランキング</button><button class="rec-tab" id="tab-hist">📅 日付別記録</button></div>
+    <div class="rec-body" id="rec-rank-body"></div>
+    <div class="rec-body" id="rec-hist-body" style="display:none"></div>
+  </div>
+
+  <!-- PW MODAL -->
+  <div class="ov" id="pw-ov" style="display:none">
+    <div class="mbox"><h3>🔒 事務員パスワード</h3><p>在庫管理は事務員専用です。</p><input type="password" id="pw-inp" placeholder="パスワードを入力"><p class="m-err" id="pw-err">⚠️ パスワードが違います</p><div class="mbtns"><button class="mb-c" id="pw-cancel">キャンセル</button><button class="mb-ok" id="pw-ok">認証して在庫管理へ　→</button></div></div>
+  </div>
+
+  <!-- DEL MODAL -->
+  <div class="ov" id="del-ov" style="display:none">
+    <div class="mbox"><h3>🗑️ 削除の確認</h3><p>以下のメニューを削除してもよろしいですか？</p><div class="del-name" id="del-name"></div><p style="font-size:11px;color:#C0392B;font-weight:500">⚠️ この操作は元に戻せません。</p><div class="mbtns"><button class="mb-c" id="del-cancel">キャンセル</button><button class="mb-del" id="del-ok">OK（削除する）</button></div></div>
+  </div>
+
+  <!-- RESET MODAL -->
+  <div class="ov" id="reset-ov" style="display:none">
+    <div class="mbox"><h3>⚠️ 記録リセットの確認</h3><p>これまでの昼食選択記録・人気ランキングがすべて削除されます。</p><p style="font-size:13px;font-weight:700;color:#C0392B;text-align:center;padding:4px 0">本当によろしいですか？</p><div class="mbtns"><button class="mb-c" id="reset-cancel">キャンセル</button><button class="mb-del" id="reset-ok">OK（リセットする）</button></div></div>
+  </div>
+
+  <!-- IMPORT MODAL -->
+  <div class="ov" id="imp-ov" style="display:none">
+    <div class="mbox-lg"><h3>📧 こだわりシェフ メール取り込み</h3><p class="m-desc">注文確認メールをそのまま貼り付けて「解析する」を押してください。</p><textarea class="email-ta" id="email-ta" placeholder="メール本文をここに貼り付け..."></textarea><p class="m-ld" id="m-ld">📋 解析・登録中…</p><div class="res-wrap" id="res-wrap"><div class="res-hdr" id="res-hdr"></div><div id="res-body"></div></div><div class="mbtns"><button class="mb-c" id="imp-cancel">閉じる</button><button class="mb-ok" id="btn-parse">解析する</button></div></div>
+  </div>
+
+  <div class="toast" id="toast"></div>
+</div>
+
+<script>
+// =====================================================
+//  【重要】Firebase設定
+//  Firebase Console のウェブアプリ設定から
+//  コピーした値をここに貼り付けてください
+// =====================================================
+const firebaseConfig = {
+  apiKey:            "AIzaSyBeqkdyr8lHUssMejcu7y4wUGkGdzRS24g",
+  authDomain:        "rasiku-lunch.firebaseapp.com",
+  databaseURL:       "https://rasiku-lunch-default-rtdb.asia-southeast1.firebasedatabase.app",
+  projectId:         "rasiku-lunch",
+  storageBucket:     "rasiku-lunch.firebasestorage.app",
+  messagingSenderId: "50754034421",
+  appId:             "1:50754034421:web:43da5cff3ffdd96b0703bc"
+};
+
+// Firebase初期化（SDK非同期読み込みに対応）
+// db は後から代入するので var で先に用意しておく
+var db = null;
+
+function __initFirebase(){
+  firebase.initializeApp(firebaseConfig);
+  db = firebase.database();
+  // 初期化完了後に、データ購読やアプリ起動処理をまとめて実行する
+  __afterFirebaseInit();
+}
+
+// SDK（firebaseオブジェクト）が使えるようになったら初期化する仕組み
+// フォールバックローダーが成功すると __onFirebaseReady が呼ばれる
+window.__onFirebaseReady = function(){
+  __initFirebase();
+};
+// もし既に firebase が読み込まれていれば即初期化（キャッシュ済み・高速読み込みの場合など）
+// ローダーが先に完了していたケースも拾う
+if (typeof firebase !== 'undefined' && db === null) {
+  __initFirebase();
+}
+
+// =====================================================
+//  定数・設定
+// =====================================================
+const PW = "staff1234"; // 事務員パスワード（必要に応じて変更してください）
+const WD = ["日","月","火","水","木","金","土"];
+const now = new Date();
+const TODAY = `${now.getFullYear()}年${now.getMonth()+1}月${now.getDate()}日（${WD[now.getDay()]}）`;
+const TODAY_KEY = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')}`;
+
+// Firebaseのデータパス（他のFirebaseプロジェクトと混在しても安全）
+const FB_STOCK = 'rasiku_stock_v1';
+const FB_MENU  = 'rasiku_menu_v1';
+const FB_LUNCH = 'rasiku_lunch_v1';
+
+let curName = "", curFurigana = "";
+let savedMain = "", savedSide1 = "", savedSide2 = "", savedNote = "";
+
+// =====================================================
+//  Firebase データ操作
+// =====================================================
+const DEF = {mains:[], sides:[]};
+
+// Firebaseキーで使えない文字を変換
+function toFbKey(str) {
+  return str.replace(/\./g,'_D_').replace(/#/g,'_H_').replace(/\$/g,'_S_')
+            .replace(/\[/g,'_LB_').replace(/\]/g,'_RB_').replace(/\//g,'_SL_');
+}
+
+// 在庫を読み込む（Firebaseから）
+async function loadS() {
+  const snap = await db.ref(FB_STOCK).once('value');
+  return snap.val() || JSON.parse(JSON.stringify(DEF));
+}
+
+// 在庫を保存（全デバイスにリアルタイム反映）
+function saveS(data) {
+  const menuStock = {
+    mains: data.mains.filter(i=>i.qty>0).map(i=>i.name),
+    sides: data.sides.filter(i=>i.qty>0).map(i=>i.name)
+  };
+  db.ref(FB_STOCK).set(data);
+  db.ref(FB_MENU).set(menuStock); // メニュー表示用（利用者端末が即更新）
+}
+
+// メニュー一覧を取得
+async function getMenuFromDB() {
+  const snap = await db.ref(FB_MENU).once('value');
+  return snap.val() || {mains:[], sides:[]};
+}
+
+// 昼食データを全件取得
+async function getAllLunchData() {
+  const snap = await db.ref(FB_LUNCH).once('value');
+  if (!snap.val()) return {};
+  const result = {};
+  Object.entries(snap.val()).forEach(([fbKey, val]) => {
+    if (!val || !val.name || !val.date) return;
+    result[val.date + '::' + val.name] = val;
+  });
+  return result;
+}
+
+// 昼食データを保存（全デバイスに共有）
+function saveLunchToServer(date, name, data) {
+  const fbKey = date + '__' + toFbKey(name);
+  db.ref(FB_LUNCH + '/' + fbKey).set({...data, name, date});
+}
+
+// =====================================================
+//  リアルタイムリスナー設定（核心部分）
+//  ★ スタッフが更新 → 利用者端末が即座に反映
+// =====================================================
+// =====================================================
+//  UI ユーティリティ
+// =====================================================
+document.getElementById('d1').textContent = TODAY;
+document.getElementById('d2').textContent = TODAY;
+
+function toast(m){const t=document.getElementById('toast');t.textContent=m;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),3000);}
+
+function go(id){
+  document.querySelectorAll('.pg').forEach(el=>{el.classList.remove('on');el.style.display='none';});
+  const pg=document.getElementById('pg-'+id);
+  if(pg){pg.style.display='flex';pg.style.flexDirection='column';pg.classList.add('on');}
+}
+
+function resetP1(){
+  nameInp.value='';furiInp.value='';
+  nameInp.className='name-inp';furiInp.className='furi-inp';
+  nameHint.textContent='漢字でご入力ください';nameHint.className='field-hint idle';
+  furiHint.textContent='ひらがなのみでご入力ください';furiHint.className='field-hint idle';
+  btnN1.disabled=true;curName='';curFurigana='';
+}
+
+function popSel(id,opts){
+  const s=document.getElementById(id);const prev=s.value;
+  s.innerHTML='<option value="">（未選択）</option>';
+  opts.forEach(o=>{const op=document.createElement('option');op.value=o;op.textContent=o;s.appendChild(op);});
+  if(prev&&opts.includes(prev))s.value=prev;
+}
+
+// =====================================================
+//  バリデーション
+// =====================================================
+function hasKanji(s){return /[\u3400-\u4DBF\u4E00-\u9FFF\uF900-\uFAFF]/.test(s);}
+function isOnlyKana(s){return s.length>0&&/^[\u3040-\u30FF\s\u3000]+$/.test(s);}
+function isHiragana(s){return s.length>0&&/^[\u3040-\u309F\u30FC]+$/.test(s);}
+
+const nameInp=document.getElementById('name-inp'),furiInp=document.getElementById('furi-inp'),btnN1=document.getElementById('btn-n1');
+const nameHint=document.getElementById('name-hint'),furiHint=document.getElementById('furi-hint');
+function checkP1(){btnN1.disabled=!(hasKanji(nameInp.value.trim())&&isHiragana(furiInp.value.trim()));}
+nameInp.addEventListener('input',()=>{const v=nameInp.value.trim();if(!v){nameInp.className='name-inp';nameHint.textContent='漢字でご入力ください';nameHint.className='field-hint idle';}else if(hasKanji(v)){nameInp.className='name-inp valid';nameHint.textContent='✓ 漢字が確認できました';nameHint.className='field-hint ok';}else if(isOnlyKana(v)){nameInp.className='name-inp invalid';nameHint.textContent='⚠️ 漢字でご入力ください';nameHint.className='field-hint warn';}else{nameInp.className='name-inp invalid';nameHint.textContent='⚠️ お名前に漢字を含めてください';nameHint.className='field-hint warn';}checkP1();});
+furiInp.addEventListener('input',()=>{const v=furiInp.value.trim();if(!v){furiInp.className='furi-inp';furiHint.textContent='ひらがなのみでご入力ください';furiHint.className='field-hint idle';}else if(isHiragana(v)){furiInp.className='furi-inp valid';furiHint.textContent='✓ ひらがなが確認できました';furiHint.className='field-hint ok';}else{furiInp.className='furi-inp invalid';furiHint.textContent='⚠️ ひらがなのみでご入力ください';furiHint.className='field-hint warn';}checkP1();});
+nameInp.addEventListener('keydown',e=>{if(e.key==='Enter')furiInp.focus();});
+furiInp.addEventListener('keydown',e=>{if(e.key==='Enter'&&!btnN1.disabled)btnN1.click();});
+
+// =====================================================
+//  P1 → P2（Firebaseから最新メニューを取得）
+// =====================================================
+btnN1.addEventListener('click',async()=>{
+  curName=nameInp.value.replace(/[\s\u3000]/g,'');
+  curFurigana=furiInp.value.trim();
+  if(!curName||!hasKanji(curName)||!curFurigana||!isHiragana(curFurigana))return;
+  // ★ Firebaseから最新メニューを取得（スタッフが追加した分も反映）
+  const m=await getMenuFromDB();
+  popSel('sel-main',m.mains);
+  popSel('sel-s1',m.sides);
+  popSel('sel-s2',m.sides);
+  document.getElementById('user-badge').textContent=`${curName}（${curFurigana}）`;
+  document.getElementById('note-ta').value='';
+  document.getElementById('btn-n2').disabled=true;
+  go('2');
+});
+
+// =====================================================
+//  P2: 献立選択
+// =====================================================
+function chk2(){document.getElementById('btn-n2').disabled=!document.getElementById('sel-main').value;}
+document.getElementById('sel-main').addEventListener('change',chk2);
+document.getElementById('sel-s1').addEventListener('change',async()=>{
+  const snap=await db.ref(FB_MENU).once('value');const m=snap.val()||{mains:[],sides:[]};
+  const v2=document.getElementById('sel-s2').value;
+  popSel('sel-s1',m.sides.filter(s=>s!==v2));
+  const v1=document.getElementById('sel-s1').value;
+  popSel('sel-s2',m.sides.filter(s=>s!==v1));
+  if(v2&&v2!==v1&&m.sides.includes(v2))document.getElementById('sel-s2').value=v2;
+  chk2();
+});
+document.getElementById('sel-s2').addEventListener('change',async()=>{
+  const snap=await db.ref(FB_MENU).once('value');const m=snap.val()||{mains:[],sides:[]};
+  const v1=document.getElementById('sel-s1').value;
+  popSel('sel-s2',m.sides.filter(s=>s!==v1));
+  const v2=document.getElementById('sel-s2').value;
+  popSel('sel-s1',m.sides.filter(s=>s!==v2));
+  if(v1&&v1!==v2&&m.sides.includes(v1))document.getElementById('sel-s1').value=v1;
+  chk2();
+});
+document.getElementById('btn-b2').addEventListener('click',()=>go('1'));
+document.getElementById('btn-n2').addEventListener('click',()=>{
+  const main=document.getElementById('sel-main').value;
+  const s1=document.getElementById('sel-s1').value;const s2=document.getElementById('sel-s2').value;const note=document.getElementById('note-ta').value.trim();
+  document.getElementById('conf-ttl').textContent=`${curName}（${curFurigana}）さんの献立`;
+  const rows=[{l:'氏名',v:`${curName}（${curFurigana}）`},{l:'主菜',v:main},{l:'副菜①',v:s1||'—'},{l:'副菜②',v:s2||'—'}];
+  if(note)rows.push({l:'備考',v:note});
+  document.getElementById('conf-card').innerHTML=rows.map(r=>`<div class="c-row"><span class="c-lbl">${r.l}</span><span class="c-val">${r.v}</span></div>`).join('');
+  go('conf');
+});
+
+// =====================================================
+//  確認 → 保存（Firebase共有）
+// =====================================================
+document.getElementById('btn-no').addEventListener('click',()=>go('2'));
+document.getElementById('btn-ok').addEventListener('click',async()=>{
+  savedMain=document.getElementById('sel-main').value;
+  savedSide1=document.getElementById('sel-s1').value;
+  savedSide2=document.getElementById('sel-s2').value;
+  savedNote=document.getElementById('note-ta').value.trim();
+  // ★ Firebaseに保存（全端末に即時共有）
+  saveLunchToServer(TODAY_KEY,curName,{
+    main:savedMain,side1:savedSide1,side2:savedSide2,
+    note:savedNote,furigana:curFurigana,at:new Date().toISOString()
+  });
+  // 在庫を自動減算
+  const stk=await loadS();
+  if(savedMain){const m=stk.mains.find(i=>i.name===savedMain);if(m)m.qty=Math.max(0,m.qty-1);}
+  if(savedSide1){const s=stk.sides.find(i=>i.name===savedSide1);if(s)s.qty=Math.max(0,s.qty-1);}
+  if(savedSide2){const s=stk.sides.find(i=>i.name===savedSide2);if(s)s.qty=Math.max(0,s.qty-1);}
+  saveS(stk);
+  document.getElementById('p3-msg').innerHTML=`今日の主菜は<br><strong style="color:#185FA5">${savedMain}</strong><br>本日もよろしくお願いします 😊`;
+  document.getElementById('btn-done').disabled=false;document.getElementById('btn-done').textContent='完了';
+  go('3');
+});
+document.getElementById('btn-done').addEventListener('click',()=>{resetP1();go('1');});
+
+// =====================================================
+//  在庫管理
+// =====================================================
+document.getElementById('plus-btn').addEventListener('click',()=>{document.getElementById('pw-inp').value='';document.getElementById('pw-err').style.display='none';document.getElementById('pw-ov').style.display='flex';setTimeout(()=>document.getElementById('pw-inp').focus(),60);});
+document.getElementById('pw-cancel').addEventListener('click',()=>document.getElementById('pw-ov').style.display='none');
+document.getElementById('pw-ok').addEventListener('click',()=>{if(document.getElementById('pw-inp').value===PW){document.getElementById('pw-ov').style.display='none';renderStk();go('stk');}else{document.getElementById('pw-err').style.display='block';document.getElementById('pw-inp').select();}});
+document.getElementById('pw-inp').addEventListener('keydown',e=>{if(e.key==='Enter')document.getElementById('pw-ok').click();});
+document.getElementById('btn-stkback').addEventListener('click',()=>go('1'));
+
+let pendingDel=null;
+function openDelModal(type,idx,name){pendingDel={type,idx};document.getElementById('del-name').textContent=name;document.getElementById('del-ov').style.display='flex';}
+document.getElementById('del-cancel').addEventListener('click',()=>{document.getElementById('del-ov').style.display='none';pendingDel=null;});
+document.getElementById('del-ok').addEventListener('click',async()=>{
+  if(pendingDel){const d=await loadS();const name=d[pendingDel.type+'s'][pendingDel.idx]?.name||'';d[pendingDel.type+'s'].splice(pendingDel.idx,1);saveS(d);renderStk();toast(`「${name}」を削除しました`);}
+  document.getElementById('del-ov').style.display='none';pendingDel=null;
+});
+
+function renderCol(type,items){
+  const el=document.getElementById('items-'+type);el.innerHTML='';
+  const av=items.filter(i=>i.qty>0).length;
+  document.getElementById('cnt-'+(type==='main'?'m':'s')).textContent=`利用可 ${av}/${items.length}`;
+  if(!items.length){el.innerHTML='<div class="sc-empty">メニューなし<br><small>「メール取り込み」または「追加」で登録できます</small></div>';return;}
+  items.forEach((item,idx)=>{
+    const div=document.createElement('div');div.className='si';
+    const nm=document.createElement('span');nm.className='si-name'+(item.qty===0?' z':'');nm.textContent=item.name;
+    const qc=document.createElement('div');qc.className='qc';
+    const mi=document.createElement('button');mi.className='qb m';mi.textContent='−';
+    mi.onclick=async()=>{const d=await loadS();d[type+'s'][idx].qty=Math.max(0,d[type+'s'][idx].qty-1);saveS(d);renderStk();};
+    const qn=document.createElement('span');qn.className='qn'+(item.qty===0?' z':'');qn.textContent=item.qty;
+    const pl=document.createElement('button');pl.className='qb p';pl.textContent='+';
+    pl.onclick=async()=>{const d=await loadS();d[type+'s'][idx].qty++;saveS(d);renderStk();};
+    qc.append(mi,qn,pl);
+    const dl=document.createElement('button');dl.className='del';dl.textContent='✕';dl.onclick=()=>openDelModal(type,idx,item.name);
+    div.append(nm,qc,dl);el.appendChild(div);
+  });
+}
+async function renderStk(){const d=await loadS();renderCol('main',d.mains);renderCol('side',d.sides);}
+async function addI(type){
+  const inp=document.getElementById('inp-'+type);const n=inp.value.trim();if(!n)return;
+  const d=await loadS();if(d[type+'s'].find(i=>i.name===n)){toast('同じ名前がすでにあります');return;}
+  d[type+'s'].push({name:n,qty:1});saveS(d);renderStk();inp.value='';toast(`✓ 「${n}」を追加しました`);
+}
+['main','side'].forEach(t=>document.getElementById('inp-'+t).addEventListener('keydown',e=>{if(e.key==='Enter')addI(t);}));
+
+// =====================================================
+//  昼食管理リスト
+// =====================================================
+async function renderLunchList(){
+  const allData=await getAllLunchData();
+  const entries=Object.entries(allData)
+    .filter(([k])=>k.startsWith(TODAY_KEY+'::'))
+    .map(([k,v])=>({name:k.split('::')[1],...v}));
+  entries.sort((a,b)=>(a.furigana||a.name).normalize('NFC').localeCompare((b.furigana||b.name).normalize('NFC'),'ja'));
+  document.getElementById('lunch-count').textContent=entries.length?`${entries.length}名が選択済み`:'まだ選択なし';
+  const wrap=document.getElementById('lunch-list-wrap');
+  if(!entries.length){wrap.innerHTML='<div class="lunch-empty"><span>🍽️</span><span>本日の選択はまだありません</span></div>';return;}
+  wrap.innerHTML='';
+  entries.forEach(entry=>{
+    let atStr='—';if(entry.at){try{const dt=new Date(entry.at);atStr=`${String(dt.getHours()).padStart(2,'0')}:${String(dt.getMinutes()).padStart(2,'0')}`;}catch(e){}}
+    const item=document.createElement('div');item.className='l-item';
+    const hdr=document.createElement('div');hdr.className='l-hdr';
+    hdr.innerHTML=`<span class="l-arrow">▷</span><div class="l-nameblock"><span class="l-name">${entry.name}</span><span class="l-furi">${entry.furigana||''}</span></div><span class="l-time">${atStr}</span><span class="l-tip">ダブルクリック</span>`;
+    const det=document.createElement('div');det.className='l-det';
+    det.innerHTML=[{l:'ふりがな',v:entry.furigana||'—'},{l:'送信時間',v:atStr},{l:'主菜',v:entry.main||'—'},{l:'副菜①',v:entry.side1||'—'},{l:'副菜②',v:entry.side2||'—'},{l:'備考',v:entry.note||'—'}].map(f=>`<div class="l-det-row"><span class="l-det-lbl">${f.l}</span><span class="l-det-val">${f.v}</span></div>`).join('');
+    let open=false;hdr.addEventListener('dblclick',()=>{open=!open;det.style.maxHeight=open?det.scrollHeight+'px':'0';if(open)det.classList.add('open');else det.classList.remove('open');hdr.querySelector('.l-arrow').textContent=open?'▼':'▷';});
+    item.appendChild(hdr);item.appendChild(det);wrap.appendChild(item);
+  });
+}
+document.getElementById('btn-lunch-nav').addEventListener('click',()=>{renderLunchList();go('lunch');});
+document.getElementById('btn-lunchback').addEventListener('click',()=>go('stk'));
+document.getElementById('btn-refresh').addEventListener('click',()=>{renderLunchList();toast('更新しました');});
+
+// =====================================================
+//  ランキング・記録
+// =====================================================
+function buildRankings(allData){const mc={},sc={};Object.values(allData).forEach(e=>{if(e.main)mc[e.main]=(mc[e.main]||0)+1;if(e.side1)sc[e.side1]=(sc[e.side1]||0)+1;if(e.side2)sc[e.side2]=(sc[e.side2]||0)+1;});return{topM:Object.entries(mc).sort((a,b)=>b[1]-a[1]).slice(0,10),topS:Object.entries(sc).sort((a,b)=>b[1]-a[1]).slice(0,10)};}
+function rankListHTML(items,barClass){if(!items.length)return'<div class="rank-empty">データなし</div>';const medals=['🥇','🥈','🥉'];const max=items[0][1];return items.map(([name,cnt],i)=>{const pct=Math.round(cnt/max*100);const pos=i<3?`<span class="rank-pos">${medals[i]}</span>`:`<span class="rank-pos num">${i+1}</span>`;return`<div class="rank-item">${pos}<div class="rank-info"><div class="rank-name">${name}</div><div class="rank-bar-wrap"><div class="${barClass}" style="width:${pct}%"></div></div></div><div class="rank-cnt">×${cnt}回</div></div>`;}).join('');}
+async function renderRankTab(){const allData=await getAllLunchData();const{topM,topS}=buildRankings(allData);const total=Object.keys(allData).length;document.getElementById('rec-rank-body').innerHTML=`<div style="font-size:11px;color:var(--color-text-tertiary);text-align:right;margin-bottom:10px">累計選択回数: ${total}件</div><div class="rank-section-title">🏆 人気の昼食メニューランキング</div><div class="rank-grid"><div><div class="rank-col-hdr">🍖 主菜 TOP10</div>${rankListHTML(topM,'rank-bar-m')}</div><div><div class="rank-col-hdr">🥗 副菜 TOP10</div>${rankListHTML(topS,'rank-bar-s')}</div></div>`;}
+function fmtDate(ds){const[y,m,d]=ds.split('-').map(Number);const dt=new Date(y,m-1,d);return`${y}年${m}月${d}日（${WD[dt.getDay()]}）`;}
+async function renderHistTab(){
+  const allData=await getAllLunchData();const byDate={};
+  Object.entries(allData).forEach(([key,val])=>{const idx=key.indexOf('::');if(idx<0)return;const date=key.substring(0,idx);const name=key.substring(idx+2);if(!byDate[date])byDate[date]=[];byDate[date].push({name,...val});});
+  const dates=Object.keys(byDate).sort((a,b)=>b.localeCompare(a));
+  const wrap=document.getElementById('rec-hist-body');wrap.innerHTML='';
+  if(!dates.length){wrap.innerHTML='<div class="rec-no-data"><span>📭</span><span>過去の記録がありません</span></div>';return;}
+  dates.forEach(dateStr=>{
+    const entries=byDate[dateStr];entries.sort((a,b)=>(a.furigana||a.name).normalize('NFC').localeCompare((b.furigana||b.name).normalize('NFC'),'ja'));
+    const dateBlock=document.createElement('div');dateBlock.className='h2-date-block';
+    const dateHdr=document.createElement('div');dateHdr.className='h2-date-hdr';
+    dateHdr.innerHTML=`<span class="h2-arr">▷</span><span class="h2-date-lbl">📅 ${fmtDate(dateStr)}</span><span class="h2-cnt">${entries.length}名</span><span class="h2-tip">ダブルクリックで展開</span>`;
+    const namesWrap=document.createElement('div');namesWrap.className='h2-names';
+    let dOpen=false;dateHdr.addEventListener('dblclick',()=>{dOpen=!dOpen;namesWrap.classList.toggle('open',dOpen);dateHdr.querySelector('.h2-arr').textContent=dOpen?'▼':'▷';});
+    entries.forEach(entry=>{
+      let atStr='—';if(entry.at){try{const dt=new Date(entry.at);atStr=`${String(dt.getHours()).padStart(2,'0')}:${String(dt.getMinutes()).padStart(2,'0')}`;}catch(e){}}
+      const nameBlock=document.createElement('div');nameBlock.className='h2-name-block';
+      const nameHdr=document.createElement('div');nameHdr.className='h2-name-hdr';
+      nameHdr.innerHTML=`<span class="h2-narr">▷</span><div class="h2-ninfo"><span class="h2-nname">${entry.name}</span>${entry.furigana?`<span class="h2-nfuri">（${entry.furigana}）</span>`:''}</div><span class="h2-ntime">${atStr}</span><span class="h2-tip">ダブルクリック</span>`;
+      const detWrap=document.createElement('div');detWrap.className='h2-detail';
+      detWrap.innerHTML=[{l:'送信時間',v:atStr},{l:'主菜',v:entry.main||'—'},{l:'副菜①',v:entry.side1||'—'},{l:'副菜②',v:entry.side2||'—'},{l:'備考',v:entry.note||'—'}].map(f=>`<div class="h2-det-row"><span class="h2-det-lbl">${f.l}</span><span class="h2-det-val">${f.v}</span></div>`).join('');
+      let nOpen=false;nameHdr.addEventListener('dblclick',e=>{e.stopPropagation();nOpen=!nOpen;detWrap.classList.toggle('open',nOpen);nameHdr.querySelector('.h2-narr').textContent=nOpen?'▼':'▷';});
+      nameBlock.appendChild(nameHdr);nameBlock.appendChild(detWrap);namesWrap.appendChild(nameBlock);
+    });
+    dateBlock.appendChild(dateHdr);dateBlock.appendChild(namesWrap);wrap.appendChild(dateBlock);
+  });
+}
+function switchRecTab(id){document.querySelectorAll('.rec-tab').forEach(t=>t.classList.remove('on'));document.getElementById('tab-'+id).classList.add('on');document.getElementById('rec-rank-body').style.display=id==='rank'?'block':'none';document.getElementById('rec-hist-body').style.display=id==='hist'?'block':'none';}
+document.getElementById('tab-rank').addEventListener('click',()=>{switchRecTab('rank');renderRankTab();});
+document.getElementById('tab-hist').addEventListener('click',()=>{switchRecTab('hist');renderHistTab();});
+document.getElementById('btn-record').addEventListener('click',()=>{switchRecTab('rank');renderRankTab();go('record');});
+document.getElementById('btn-recback').addEventListener('click',()=>go('stk'));
+document.getElementById('btn-reset-rec').addEventListener('click',()=>document.getElementById('reset-ov').style.display='flex');
+document.getElementById('reset-cancel').addEventListener('click',()=>document.getElementById('reset-ov').style.display='none');
+document.getElementById('reset-ok').addEventListener('click',()=>{db.ref(FB_LUNCH).remove();document.getElementById('reset-ov').style.display='none';switchRecTab('rank');renderRankTab();toast('✓ 記録をリセットしました');});
+
+// =====================================================
+//  メール取り込み
+// =====================================================
+function parseEmailText(rawText){const lines=rawText.split(/\r?\n/).map(l=>l.trim()).filter(l=>l.length>0);const items=[];let curType=null;let needName=false;for(const line of lines){if(/^\d+月\d+日$/.test(line)){needName=false;continue;}if(/\d+月\d+日[～〜]/.test(line))continue;if(/[¥￥]/.test(line)){const nums=line.match(/\d+/g);if(nums&&nums.length>=2&&items.length>0&&!items[items.length-1].qty){items[items.length-1].qty=parseInt(nums[nums.length-1],10);}continue;}if(line.includes('お届け予定日'))continue;if(line.includes('メイン')){curType='main';needName=true;continue;}if(line.includes('副菜')||line.includes('プレミアム小鉢')){curType='side';needName=true;continue;}if(needName&&curType&&line.length>0){items.push({name:line,type:curType,qty:0});needName=false;}}return items.filter(it=>it.qty>0&&it.name.length>0);}
+document.getElementById('btn-mail').addEventListener('click',()=>{document.getElementById('email-ta').value='';document.getElementById('res-wrap').style.display='none';document.getElementById('m-ld').style.display='none';document.getElementById('btn-parse').disabled=false;document.getElementById('btn-parse').textContent='解析する';document.getElementById('imp-ov').style.display='flex';setTimeout(()=>document.getElementById('email-ta').focus(),60);});
+document.getElementById('imp-cancel').addEventListener('click',()=>document.getElementById('imp-ov').style.display='none');
+document.getElementById('btn-parse').addEventListener('click',async()=>{
+  const txt=document.getElementById('email-ta').value.trim();
+  if(!txt){toast('メール本文を入力してください');return;}
+  document.getElementById('m-ld').style.display='block';document.getElementById('res-wrap').style.display='none';
+  document.getElementById('btn-parse').disabled=true;document.getElementById('btn-parse').textContent='解析中…';
+  setTimeout(async()=>{
+    try{
+      const items=parseEmailText(txt);
+      if(!items.length){toast('メニューが見つかりませんでした。');return;}
+      const stk=await loadS();const added=[],updated=[];
+      items.forEach(item=>{const arr=item.type==='main'?stk.mains:stk.sides;const ex=arr.find(x=>x.name===item.name);if(ex){const o=ex.qty;ex.qty+=item.qty;updated.push({...item,oldQty:o,newQty:ex.qty});}else{arr.push({name:item.name,qty:item.qty});added.push(item);}});
+      saveS(stk);renderStk();
+      const total=added.length+updated.length;
+      document.getElementById('res-hdr').textContent=`✅ ${total}件を処理（🆕 新規: ${added.length}件 ／ 📦 更新: ${updated.length}件）`;
+      let html='';
+      [...added.filter(i=>i.type==='main'),...added.filter(i=>i.type==='side')].forEach(i=>{html+=`<div class="res-item"><span class="${i.type==='main'?'tag-m':'tag-s'}">${i.type==='main'?'主菜':'副菜'}</span><span style="flex:1">${i.name}</span><span class="res-st"><span class="new-lbl">🆕 ×${i.qty}</span></span></div>`;});
+      [...updated.filter(i=>i.type==='main'),...updated.filter(i=>i.type==='side')].forEach(i=>{html+=`<div class="res-item"><span class="${i.type==='main'?'tag-m':'tag-s'}">${i.type==='main'?'主菜':'副菜'}</span><span style="flex:1">${i.name}</span><span class="res-st">${i.oldQty}→${i.newQty}</span></div>`;});
+      document.getElementById('res-body').innerHTML=html;document.getElementById('res-wrap').style.display='block';
+      document.getElementById('btn-parse').textContent='再解析';toast(`✓ ${total}件を在庫に反映しました（全端末に即時共有）`);
+    }catch(err){toast('解析中にエラーが発生しました。');}
+    finally{document.getElementById('m-ld').style.display='none';document.getElementById('btn-parse').disabled=false;}
+  },200);
+});
+
+// =====================================================
+//  起動処理
+// =====================================================
+let appStarted=false;
+function startApp(){
+  if(appStarted)return;appStarted=true;
+  document.getElementById('load-ov').style.display='none';
+  go('1');
+}
+
+// Firebase初期化が完了した後に呼ばれる関数
+// （SDKの非同期読み込みに対応するため、ここに購読処理と起動処理をまとめる）
+function __afterFirebaseInit(){
+
+  // --- リアルタイム購読（全端末で共有）---
+  // メニュー更新を全端末にリアルタイム反映
+  db.ref(FB_MENU).on('value', snap => {
+    const menu = snap.val() || {mains:[], sides:[]};
+    const pg2 = document.getElementById('pg-2');
+    if (pg2.classList.contains('on')) {
+      const v1 = document.getElementById('sel-s1').value;
+      const v2 = document.getElementById('sel-s2').value;
+      popSel('sel-main', menu.mains);
+      popSel('sel-s1', menu.sides.filter(s=>s!==v2));
+      popSel('sel-s2', menu.sides.filter(s=>s!==v1));
+      if (v1 && menu.sides.includes(v1) && v1!==v2) document.getElementById('sel-s1').value = v1;
+      if (v2 && menu.sides.includes(v2) && v1!==v2) document.getElementById('sel-s2').value = v2;
+      chk2();
+    }
+  });
+
+  // 昼食選択を全端末にリアルタイム反映
+  db.ref(FB_LUNCH).on('value', () => {
+    if (document.getElementById('pg-lunch').classList.contains('on')) {
+      renderLunchList();
+    }
+  });
+
+  // オンライン/オフライン状態を監視
+  db.ref('.info/connected').on('value', snap => {
+    const banner = document.getElementById('conn-banner');
+    if (snap.val() === true) {
+      banner.style.display = 'none';
+    } else {
+      banner.style.display = 'block';
+    }
+  });
+
+  // --- 起動判定 ---
+  // Firebase接続成功でアプリ起動
+  db.ref('.info/connected').once('value',snap=>{
+    if(snap.val()===true)startApp();
+  });
+
+  // 接続が確認できなくても3秒後には起動（オフラインでも画面は使えるように）
+  setTimeout(()=>{
+    if(!appStarted){startApp();}
+  },3000);
+}
+</script>
+</body>
+</html>
